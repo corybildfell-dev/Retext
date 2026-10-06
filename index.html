@@ -71,13 +71,22 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .linkbtn{display:block;margin:16px auto 0;background:none;border:0;color:var(--accent);font:600 15px -apple-system,system-ui,sans-serif;cursor:pointer;padding:6px}
 .wp{height:3px;background:var(--line);border-radius:3px;margin:14px auto 0;max-width:280px;overflow:hidden}
 .wp i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
-#pv{display:block;margin:12px auto 4px;max-width:100%;height:auto;border-radius:10px;box-shadow:0 0 0 1px var(--line)}
+#pv,#pv2{display:block;margin:12px auto 4px;max-width:100%;height:auto;border-radius:10px;box-shadow:0 0 0 1px var(--line)}
 #w-note{margin:10px auto 0}
 .drop .fr+.fr{margin-top:8px}
 
 #cropbox{position:relative;display:inline-block;max-width:100%;touch-action:none;line-height:0;margin-top:8px;-webkit-user-select:none;user-select:none}
 #cropcv{display:block;max-width:100%;max-height:56dvh;width:auto;height:auto;border-radius:8px}
 #cropov{position:absolute;left:0;top:0;width:100%;height:100%;border-radius:8px}
+
+#work{padding-bottom:86px}
+#dock{position:fixed;left:0;right:0;bottom:0;z-index:15;display:flex;gap:8px;padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:var(--surface);border-top:1px solid var(--line)}
+#dock .btn{flex:1;height:46px;padding:0 8px;font-size:14px}
+#dock .btn.primary{flex:1.3}
+#preview{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.94);display:flex;flex-direction:column;align-items:center;gap:12px;padding:calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));color:#fff;overflow:auto}
+#preview img{width:min(100%,480px);height:auto;border-radius:10px;flex:none}
+.prow{display:flex;gap:10px;width:min(100%,480px)}
+.prow .btn{flex:1;height:46px}
 
 /* ticket fields */
 #fields{margin:0 16px 10px;padding:12px;border-radius:14px;background:var(--surface);box-shadow:0 0 0 1px var(--line)}
@@ -135,13 +144,11 @@ input[type=text],select{font:16px -apple-system,system-ui,sans-serif;height:42px
   <div class="mark">Retext</div>
   <div class="actions" id="actions" hidden>
     <button class="btn" id="restart" type="button">Start over</button>
-    <label class="btn" for="file" data-phase="target">New</label>
-    <button class="btn primary" id="save" type="button">Save</button>
   </div>
 </header>
 
 <div id="err" role="alert" hidden></div>
-<input class="sr" id="file" type="file" accept="image/*">
+<input class="sr" id="file" type="file" accept="image/png,image/jpeg">
 
 <section id="empty">
   <div class="drop wiz" id="w-pick">
@@ -150,40 +157,42 @@ input[type=text],select{font:16px -apple-system,system-ui,sans-serif;height:42px
       <s>Sec 112  Row 5  Seat 8</s>
       <span class="new">Sec 204  Row 12  Seat 3</span>
     </div>
-    <h1>Start with the lower bowl ticket</h1>
-    <p>Step 1 of 2. Choose the lower bowl ticket. Its Section, Row and Seat are read from it.</p>
-    <label class="cta" for="file" data-phase="source">Choose lower bowl ticket</label>
-    <button class="linkbtn" id="w-type" type="button">Type the values instead</button>
-  </div>
-  <div class="drop wiz" id="w-crop" hidden>
-    <h2>Crop to the seat info</h2>
-    <p>Drag over the part that shows Section, Row and Seat. A tight crop reads best.</p>
-    <div id="cropbox"><canvas id="cropcv"></canvas><canvas id="cropov"></canvas></div>
-    <button class="btn primary" id="crop-go" type="button" style="width:100%;height:46px;margin-top:14px">Read this area</button>
-    <button class="linkbtn" id="crop-all" type="button">Use the whole image</button>
+    <h1>Start with the nosebleeds ticket</h1>
+    <p>Step 1 of 2. Choose the nosebleeds ticket you want to update.</p>
+    <label class="cta" for="file" data-phase="target">Choose nosebleeds ticket</label>
   </div>
   <div class="drop wiz" id="w-read" hidden>
-    <h2>Reading the lower bowl ticket…</h2>
+    <h2>Reading…</h2>
     <p id="w-msg">Starting…</p>
     <div class="wp"><i id="w-bar"></i></div>
-    <button class="linkbtn" id="w-skip" type="button">Type the values instead</button>
+    <button class="linkbtn" id="w-skip" type="button" hidden>Type the values instead</button>
+  </div>
+  <div class="drop wiz" id="w-lower" hidden>
+    <h2>Nosebleeds ticket ready</h2>
+    <p id="w-found"></p>
+    <p style="margin-top:8px">Step 2 of 2. Choose the lower bowl ticket. Its Section, Row, Seat and time of day are copied onto the nosebleeds ticket.</p>
+    <label class="cta" for="file" data-phase="source">Choose lower bowl ticket</label>
+    <button class="linkbtn" id="w-type" type="button">Type the values instead</button>
+    <label class="linkbtn" for="file" data-phase="target">Use a different nosebleeds ticket</label>
   </div>
   <div class="drop wiz" id="w-confirm" hidden>
-    <h2>Confirm the lower bowl seat</h2>
+    <h2>Confirm the lower bowl details</h2>
     <canvas id="pv" hidden></canvas>
+    <canvas id="pv2" hidden></canvas>
     <p id="w-note"></p>
       <div class="fr"><label for="c-sec">Section</label><input id="c-sec" type="text" inputmode="numeric" autocomplete="off" autocorrect="off" placeholder="Number"></div>
       <div class="fr"><label for="c-row">Row</label><input id="c-row" type="text" inputmode="numeric" autocomplete="off" autocorrect="off" placeholder="Number"></div>
       <div class="fr"><label for="c-seat">Seat</label><input id="c-seat" type="text" inputmode="numeric" autocomplete="off" autocorrect="off" placeholder="Number"></div>
-    <button class="btn primary" id="w-ok" type="button" style="width:100%;margin-top:16px;height:46px">Confirm</button>
-    <button class="linkbtn" id="w-recrop" type="button">Crop and read again</button>
+      <div class="fr"><label for="c-time">Time</label><input id="c-time" type="text" inputmode="text" autocomplete="off" autocorrect="off" placeholder="9:41 (optional)"></div>
+    <button class="btn primary" id="w-ok" type="button" style="width:100%;margin-top:16px;height:46px">Confirm and replace</button>
+    <label class="linkbtn" for="file" data-phase="source">Retry with another lower bowl screenshot</label>
+    <button class="linkbtn" id="w-back" type="button">Back</button>
   </div>
-  <div class="drop wiz" id="w-target" hidden>
-    <h2>Step 2 of 2</h2>
-    <p id="w-sum"></p>
-    <p style="margin-top:8px">Choose the nosebleeds ticket. Its Section, Row and Seat are replaced with these.</p>
-    <label class="cta" for="file" data-phase="target">Choose nosebleeds ticket</label>
-    <button class="linkbtn" id="w-change" type="button">Change values</button>
+  <div class="drop wiz" id="w-done" hidden>
+    <h2>Finished</h2>
+    <p>The updated nosebleeds ticket went to your share sheet. If you chose Save Image, it's in Photos.</p>
+    <button class="btn primary" id="w-new" type="button" style="width:100%;margin-top:16px;height:46px">Start a new ticket</button>
+    <button class="linkbtn" id="w-return" type="button">Back to the ticket</button>
   </div>
 </section>
 
@@ -209,6 +218,7 @@ input[type=text],select{font:16px -apple-system,system-ui,sans-serif;height:42px
     <div class="fr" data-miss="sec"><label>Section</label><button class="chip" type="button" data-set="sec">Set</button></div>
     <div class="fr" data-miss="row"><label>Row</label><button class="chip" type="button" data-set="row">Set</button></div>
     <div class="fr" data-miss="seat"><label>Seat</label><button class="chip" type="button" data-set="seat">Set</button></div>
+    <div class="fr" data-miss="time"><label>Time</label><button class="chip" type="button" data-set="time">Set</button></div>
   </div>
   <div id="scroller">
     <div id="stage">
@@ -257,11 +267,24 @@ input[type=text],select{font:16px -apple-system,system-ui,sans-serif;height:42px
   </div>
 </div>
 
+<div id="dock" hidden>
+  <label class="btn" for="file" data-phase="source">Retry lower bowl</label>
+  <button class="btn" id="previewbtn" type="button">Preview</button>
+  <button class="btn primary" id="save" type="button">Save &amp; finish</button>
+</div>
+
+<div id="preview" hidden>
+  <p style="margin:0;text-align:center;font-weight:600">Preview</p>
+  <img id="pimg" alt="Preview of the updated ticket">
+  <div class="prow"><button class="btn" id="pback" type="button">Back to edit</button><button class="btn primary" id="psave" type="button">Save &amp; finish</button></div>
+</div>
+
 <div id="viewer" hidden>
   <p style="margin:0;text-align:center">Press and hold the image, then tap Add to Photos.</p>
   <img id="vimg" alt="Edited screenshot">
   <a class="btn" id="vdl" download="retext.png" style="text-decoration:none">Download</a>
-  <button class="btn primary" id="vclose" type="button">Close</button>
+  <button class="btn primary" id="vdone" type="button">I've saved it. Finish</button>
+  <button class="btn" id="vclose" type="button">Close</button>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
@@ -350,37 +373,47 @@ async function decodeFile(file){
   const im=new Image();im.src=url;await im.decode();return im;
 }
 
-async function loadFile(file){
-  $('#err').hidden=true;
-  let im;
-  try{im=await decodeFile(file);}
-  catch(e){showErr("Couldn't open that image ("+(e&&e.message||e)+"). Try a PNG or JPEG screenshot.");return;}
+async function decodeToCanvas(file){
+  const im=await decodeFile(file);
   let w=im.naturalWidth||im.width,h=im.naturalHeight||im.height,k=1;
   if(w*h>16e6)k=Math.sqrt(16e6/(w*h));
-  W=Math.round(w*k);H=Math.round(h*k);
-  src=document.createElement('canvas');src.width=W;src.height=H;
-  sctx=src.getContext('2d',{willReadFrequently:true});
-  sctx.drawImage(im,0,0,W,H);
+  const c=document.createElement('canvas');c.width=Math.round(w*k);c.height=Math.round(h*k);
+  const x=c.getContext('2d',{willReadFrequently:true});
+  x.drawImage(im,0,0,c.width,c.height);
   if(im.close)im.close();
+  return {src:c,sctx:x,W:c.width,H:c.height};
+}
+async function loadFile(file){return phase==='source'?loadLower(file):loadTarget(file);}
+
+/* Step 1: the nosebleeds ticket (the image that gets edited). */
+async function loadTarget(file){
+  $('#err').hidden=true;
+  let img;
+  try{img=await decodeToCanvas(file);}
+  catch(e){showErr("Couldn't open that image ("+(e&&e.message||e)+"). Try a PNG or JPEG screenshot.");return;}
+  ({src,sctx,W,H}=img);
   cv.width=W;cv.height=H;
-  words=[];boxes=[];edits=[];sel=null;
-  resetFields();
-  closeSheet();setDrawing(false);
+  words=[];boxes=[];edits=[];sel=null;vals=null;
+  resetFields();closeSheet();setDrawing(false);
   cancelRead=false;located=false;
-  if(phase!=='source'){
-    fillFromLayout();render();overlay();
-    $('#empty').hidden=true;$('#work').hidden=false;$('#actions').hidden=false;
-    window.scrollTo(0,0);
-  }
-  invertOCR=isDark();
-  updateRescan();
-  preloadFonts();
-  if(phase==='source')startCrop();else runOCR(null);
+  invertOCR=isDark(src);updateRescan();preloadFonts();
+  render();overlay();
+  wstep('read');$('#w-read h2').textContent='Reading the nosebleeds ticket…';$('#w-skip').hidden=true;
+  setStatus('Starting…',0);
+  const err=await scanTarget();
+  fillFromLayout();
+  for(const f of FIELDS){const s=fv[f.k];if(s.box&&!s.orig&&s.src==='layout')s.orig=readFieldText(f.k,s.box);}
+  overlay();
+  const got=FIELDS.filter(f=>fv[f.k].box).map(f=>f.name),lost=FIELDS.filter(f=>!fv[f.k].box).map(f=>f.name);
+  $('#w-found').textContent=err?"Automatic scanning isn't available here, so you'll point to the numbers after the next step."
+    :!lost.length?`Found ${got.join(', ')} on it.`
+    :`Found ${got.length?got.join(', '):'nothing yet'}. Couldn't find ${lost.join(', ')}. You can point to it after the next step.`;
+  wstep('lower');
 }
 
-function isDark(){
+function isDark(c){
   const t=document.createElement('canvas');t.width=t.height=32;
-  const x=t.getContext('2d');x.drawImage(src,0,0,32,32);
+  const x=t.getContext('2d');x.drawImage(c,0,0,32,32);
   const d=x.getImageData(0,0,32,32).data;let s=0;
   for(let i=0;i<d.length;i+=4)s+=.299*d[i]+.587*d[i+1]+.114*d[i+2];
   return s/1024<110;
@@ -402,11 +435,11 @@ function invertCanvas(c){
   for(let i=0;i<p.length;i+=4){p[i]=255-p[i];p[i+1]=255-p[i+1];p[i+2]=255-p[i+2];}
   x.putImageData(id,0,0);
 }
-function ocrCanvas(base,scale,invert){
+function ocrCanvas(img,base,scale,invert){
   const c=document.createElement('canvas');
   c.width=Math.max(1,Math.round(base.w*scale));c.height=Math.max(1,Math.round(base.h*scale));
   const x=c.getContext('2d');x.imageSmoothingQuality='high';
-  x.drawImage(src,base.x,base.y,base.w,base.h,0,0,c.width,c.height);
+  x.drawImage(img.src,base.x,base.y,base.w,base.h,0,0,c.width,c.height);
   if(invert)invertCanvas(c);
   return c;
 }
@@ -414,6 +447,20 @@ async function pass(canvas,psm,whitelist){
   await worker.setParameters({tessedit_pageseg_mode:String(psm),tessedit_char_whitelist:whitelist||''});
   const {data}=await worker.recognize(canvas);
   return data;
+}
+async function getWorker(){
+  if(typeof Tesseract==='undefined')throw new Error('no library');
+  if(!worker){
+    const make=Tesseract.createWorker('eng',1,{logger:m=>{
+      if(m.status==='recognizing text')setStatus('Reading text…',m.progress||0);
+      else if(/language/.test(m.status))setStatus('Downloading language data (first run only)…',m.progress||0);
+      else setStatus('Preparing…',m.progress||0);
+    }});
+    make.catch(()=>{});
+    worker=await Promise.race([make,new Promise((_,rej)=>setTimeout(()=>rej(new Error('timed out')),90000)),new Promise((_,rej)=>{ocrFail=rej;})]);
+    ocrFail=null;
+  }
+  return worker;
 }
 function mergeWords(a,b){
   const out=a.slice();
@@ -427,12 +474,36 @@ function mergeWords(a,b){
   }
   return out;
 }
+/* The clock in the status bar: a time like 9:41 in the top strip of the screenshot. */
+const TIME_RE=/^(\d{1,2})[:.;](\d{2})$/;
+function timeFromWords(ws,imgH){
+  const band=Math.min(imgH*.1,300);let best=null;
+  for(const w of ws){
+    if(w.y1>band)continue;
+    const m=TIME_RE.exec(w.t.replace(/^[^\d]+|[^\d]+$/g,''));
+    if(!m||+m[1]>24||+m[2]>59)continue;
+    if(!best||w.c>best.c)best={t:m[1]+':'+m[2],x0:w.x0,y0:w.y0,x1:w.x1,y1:w.y1,c:w.c};
+  }
+  return best;
+}
+async function rereadTime(img,dark){
+  const bh=Math.round(Math.min(img.H*.1,300));
+  if(bh<20)return null;
+  const base={x:0,y:0,w:img.W,h:bh},sc=Math.max(1,Math.min(3,1400/base.w));
+  let best=null;
+  for(const inv of [dark,!dark]){
+    const ws=normalizeOCR(await pass(ocrCanvas(img,base,sc,inv),11,'0123456789:'),sc,0,0,20);
+    const t=timeFromWords(ws,img.H);
+    if(t&&(!best||t.c>best.c))best=t;
+  }
+  return best;
+}
 /* Reads just the digits in the space beside and below each label that has no number yet. */
-async function rereadDigits(ws){
+async function rereadDigits(ws,res,img,dark){
   const {labels}=parseWords(ws),all=[].concat(labels.sec,labels.row,labels.seat),extra=[];
-  for(const f of FIELDS){
-    if(fv[f.k].box||!labels[f.k].length)continue;
-    const L=labels[f.k][0],h=L.y1-L.y0;
+  for(const k of LABEL_KEYS){
+    if(res[k]||!labels[k].length)continue;
+    const L=labels[k][0],h=L.y1-L.y0;
     let stop=Infinity;
     for(const o of all){if(o===L)continue;if(Math.min(L.y1,o.y1)-Math.max(L.y0,o.y0)>0&&o.x0>L.x1)stop=Math.min(stop,o.x0);}
     const regs=[
@@ -440,51 +511,38 @@ async function rereadDigits(ws){
       {x0:L.x0-h,y0:L.y1,x1:Math.min(L.x1+3*h,stop-.3*h),y1:L.y1+4*h}
     ];
     for(const r0 of regs){
-      const r={x0:Math.max(0,r0.x0),y0:Math.max(0,r0.y0),x1:Math.min(W,r0.x1),y1:Math.min(H,r0.y1)};
+      const r={x0:Math.max(0,r0.x0),y0:Math.max(0,r0.y0),x1:Math.min(img.W,r0.x1),y1:Math.min(img.H,r0.y1)};
       if(r.x1-r.x0<h*.8||r.y1-r.y0<h*.8)continue;
       const sc=Math.max(1,Math.min(4,48/Math.max(h,1)));
-      const c=ocrCanvas({x:r.x0,y:r.y0,w:r.x1-r.x0,h:r.y1-r.y0},sc,invertOCR);
+      const c=ocrCanvas(img,{x:r.x0,y:r.y0,w:r.x1-r.x0,h:r.y1-r.y0},sc,dark);
       const data=await pass(c,7,'0123456789');
       for(const w of normalizeOCR(data,sc,r.x0,r.y0,50))if(/^\d{1,4}$/.test(w.t))extra.push(w);
     }
   }
   return extra;
 }
-
-/* region = part of the image to read (the crop), or null for all of it. Escalates only if numbers are missing. */
-async function runOCR(region){
-  setStatus('Starting text detection…',0);
+/* Scans a whole screenshot for SEC / ROW / SEAT values and the clock. Escalates only if something is missing. */
+async function scanImage(img,dark,skip){
+  skip=skip||new Set();
+  await getWorker();
+  const base={x:0,y:0,w:img.W,h:img.H},scale=base.w<1100?Math.min(3,1100/base.w):1;
+  const read=async(psm,inv)=>normalizeOCR(await pass(ocrCanvas(img,base,scale,inv),psm,''),scale,0,0);
+  let ws=await read(11,dark),res=findFields(ws,skip);
+  const need=()=>LABEL_KEYS.some(k=>!res[k]&&!skip.has(k));
+  if(need()&&!cancelRead){setStatus('Looking more closely…',null);ws=mergeWords(ws,await read(6,dark));res=findFields(ws,skip);}
+  if(need()&&!cancelRead){setStatus('Trying the other contrast…',null);ws=mergeWords(ws,await read(11,!dark));res=findFields(ws,skip);}
+  if(need()&&!cancelRead){setStatus('Reading the numbers beside each label…',null);ws=mergeWords(ws,await rereadDigits(ws,res,img,dark));res=findFields(ws,skip);}
+  let time=timeFromWords(ws,img.H);
+  if(!time&&!cancelRead){setStatus('Looking for the clock…',null);time=await rereadTime(img,dark);}
+  return {words:ws,res,time};
+}
+async function scanTarget(){
   try{
-    if(typeof Tesseract==='undefined')throw new Error('no library');
-    if(!worker){
-      const make=Tesseract.createWorker('eng',1,{logger:m=>{
-        if(m.status==='recognizing text')setStatus('Reading text…',m.progress||0);
-        else if(/language/.test(m.status))setStatus('Downloading language data (first run only)…',m.progress||0);
-        else setStatus('Preparing…',m.progress||0);
-      }});
-      make.catch(()=>{});
-      worker=await Promise.race([make,new Promise((_,rej)=>setTimeout(()=>rej(new Error('timed out')),90000)),new Promise((_,rej)=>{ocrFail=rej;})]);
-      ocrFail=null;
-    }
-    const base=region||{x:0,y:0,w:W,h:H};
-    const scale=base.w<1100?Math.min(3,1100/base.w):1;
-    const read=async(psm,inv)=>normalizeOCR(await pass(ocrCanvas(base,scale,inv),psm,''),scale,base.x,base.y);
-    words=await read(11,invertOCR);
-    let n=autoFind();
-    if(n<3&&!cancelRead){setStatus('Looking more closely…',null);words=mergeWords(words,await read(6,invertOCR));n=autoFind();}
-    if(n<3&&!cancelRead){setStatus('Trying the other contrast…',null);words=mergeWords(words,await read(11,!invertOCR));n=autoFind();}
-    if(n<3&&!cancelRead){setStatus('Reading the numbers beside each label…',null);words=mergeWords(words,await rereadDigits(words));n=autoFind();}
-    rebuildBoxes();
-    if(cancelRead)return;
-    if(phase==='source'){readSource();return;}
-    targetDone(true);
-  }catch(err){
-    console.error(err);
-    ocrFail=null;worker=null;
-    if(cancelRead)return;
-    if(phase==='source'){readSourceFailed(err);return;}
-    targetDone(false,err);
-  }
+    const skip=new Set(FIELDS.filter(f=>fv[f.k].src==='hand').map(f=>f.k));
+    const out=await scanImage({src,sctx,W,H},invertOCR,skip);
+    words=out.words;applyFound(out.res,out.time);rebuildBoxes();
+    return null;
+  }catch(err){console.error(err);ocrFail=null;worker=null;return err;}
 }
 
 function normalizeOCR(data,s,ox,oy,minConf){
@@ -771,13 +829,13 @@ ov.addEventListener('pointercancel',()=>{ds=null;tmp=null;overlay();});
 /* ---------- editor sheet ---------- */
 function openSheet(e){
   sel=e;syncSheet();
-  sheet.hidden=false;
+  sheet.hidden=false;syncDock();
   document.body.style.paddingBottom=sheet.offsetHeight+'px';
   posSheet();overlay();
   requestAnimationFrame(reveal);
 }
 function closeSheet(){
-  sel=null;sheet.hidden=true;document.body.style.paddingBottom='';
+  sel=null;sheet.hidden=true;syncDock();document.body.style.paddingBottom='';
   if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
   overlay();
 }
@@ -851,10 +909,12 @@ $('#done').addEventListener('click',closeSheet);
 
 /* ---------- ticket fields (SEC / ROW / SEAT) ---------- */
 const FIELDS=[
-  {k:'sec',name:'Section',tag:'SEC',re:/^(sec|sect|section)$/i},
-  {k:'row',name:'Row',tag:'ROW',re:/^row$/i},
-  {k:'seat',name:'Seat',tag:'SEAT',re:/^seats?$/i}
+  {k:'sec',name:'Section',tag:'SEC'},
+  {k:'row',name:'Row',tag:'ROW'},
+  {k:'seat',name:'Seat',tag:'SEAT'},
+  {k:'time',name:'Time',tag:'TIME'}
 ];
+const LABEL_KEYS=['sec','row','seat'];
 const GLUED=/^(sec(?:tion)?|row|seats?)[:#.\-]*(\d{1,4})[,.;]*$/i;
 let fv={},layout=null,pendingField=null,located=false;
 try{layout=JSON.parse(localStorage.getItem('retext.layout')||'null');}catch(e){layout=null;}
@@ -869,23 +929,25 @@ function tighten(b){
   if(a.ink&&a.ink.frac<.55)bb=clampBox(a.ink);
   return bb;
 }
-function ocrDigits(box){
+function readFieldText(k,box){
   if(!words.length)return '';
   const pw=(box.x1-box.x0)*.2,ph=(box.y1-box.y0)*.2;
   const hit=words.filter(w=>{const cx=(w.x0+w.x1)/2,cy=(w.y0+w.y1)/2;return cx>=box.x0-pw&&cx<=box.x1+pw&&cy>=box.y0-ph&&cy<=box.y1+ph;}).sort((a,b)=>a.x0-b.x0);
+  if(k==='time'){const m=hit.map(w=>w.t).join('').match(/(\d{1,2})[:.;](\d{2})/);return m?m[1]+':'+m[2]:'';}
   const t=hit.map(w=>w.t).join('').replace(/\D/g,'');
   return t.length&&t.length<=5?t:'';
 }
-function setField(k,b,src,align){
+function setField(k,b,src,align,orig){
   const f=fv[k];
   const stale=f.edit&&edits.includes(f.edit);
   if(stale)edits=edits.filter(x=>x!==f.edit);
-  f.box=tighten(b);f.src=src;f.align=align||'center';f.edit=null;f.orig=ocrDigits(f.box);
+  f.box=tighten(b);f.src=src;f.align=align||'center';f.edit=null;f.orig=orig!=null?orig:readFieldText(k,f.box);
   if(stale)render();
   overlay();
 }
 function updateFields(){
-  const miss=FIELDS.filter(f=>!fv[f.k]||!fv[f.k].box);
+  const needed=FIELDS.filter(f=>vals&&(vals[f.k]||'').trim());
+  const miss=needed.filter(f=>!fv[f.k]||!fv[f.k].box);
   $('#fields').hidden=!(located&&miss.length>0);
   document.querySelectorAll('[data-miss]').forEach(r=>{r.hidden=!miss.some(f=>f.k===r.dataset.miss);});
 }
@@ -951,16 +1013,17 @@ function parseWords(ws){
   }
   return {labels,nums};
 }
-function autoFind(){
-  if(!words.length)return 0;
-  const {labels,nums}=parseWords(words);
-  const used=new Set(),done=new Set();
-  const take=(k,n,align)=>{used.add(n);done.add(k);setField(k,n,'scan',align);fv[k].found=n.t;};
-  for(const n of nums)if(n.glued&&!done.has(n.glued)&&fv[n.glued].src!=='hand')take(n.glued,n,'left');
+function findFields(ws,skip){
+  skip=skip||new Set();
+  if(!ws.length)return {};
+  const {labels,nums}=parseWords(ws);
+  const res={},used=new Set();
+  const take=(k,n,align)=>{used.add(n);res[k]={n,align};};
+  for(const n of nums)if(n.glued&&!res[n.glued]&&!skip.has(n.glued))take(n.glued,n,'left');
   const pairs=[];
-  for(const f of FIELDS){
-    if(done.has(f.k)||fv[f.k].src==='hand')continue;
-    for(const L of labels[f.k])for(const n of nums){
+  for(const k of LABEL_KEYS){
+    if(res[k]||skip.has(k))continue;
+    for(const L of labels[k])for(const n of nums){
       if(used.has(n)||n.glued)continue;
       const lh=L.y1-L.y0,nh=n.y1-n.y0,h=Math.max(lh,nh);
       let score=null,align='center';
@@ -975,36 +1038,42 @@ function autoFind(){
           align=dl<=dcx&&dl<=dr?'left':dr<dcx?'right':'center';
         }
       }
-      if(score!=null)pairs.push({k:f.k,n,score:score+(n.fuzzy?1.5:0),align});
+      if(score!=null)pairs.push({k,n,score:score+(n.fuzzy?1.5:0),align});
     }
   }
   pairs.sort((p,q)=>p.score-q.score);
-  for(const p of pairs){if(done.has(p.k)||used.has(p.n))continue;take(p.k,p.n,p.align);}
-  /* A number is still missing: SEC, ROW, SEAT appear in that order, so look for one in the gap next to its neighbor. */
-  const order=['sec','row','seat'];
+  for(const p of pairs){if(res[p.k]||used.has(p.n))continue;take(p.k,p.n,p.align);}
+  /* A number is still missing: SEC, ROW, SEAT appear in that order, so look in the gap next to its neighbor. */
   for(let i=0;i<3;i++){
-    const k=order[i];
-    if(done.has(k)||fv[k].src==='hand')continue;
+    const k=LABEL_KEYS[i];
+    if(res[k]||skip.has(k))continue;
     let prev=null,next=null;
-    for(let j=i-1;j>=0;j--)if(done.has(order[j])){prev=fv[order[j]];break;}
-    for(let j=i+1;j<3;j++)if(done.has(order[j])){next=fv[order[j]];break;}
+    for(let j=i-1;j>=0;j--)if(res[LABEL_KEYS[j]]){prev=res[LABEL_KEYS[j]];break;}
+    for(let j=i+1;j<3;j++)if(res[LABEL_KEYS[j]]){next=res[LABEL_KEYS[j]];break;}
     if(!prev&&!next)continue;
-    const ref=(prev||next).box,rh=ref.y1-ref.y0;
+    const ref=(prev||next).n,rh=ref.y1-ref.y0;
     let best=null;
     for(const n of nums){
       if(used.has(n)||n.glued)continue;
       const nh=n.y1-n.y0,h=Math.max(rh,nh);
       if(Math.min(ref.y1,n.y1)-Math.max(ref.y0,n.y0)<.5*Math.min(rh,nh))continue;
       let gap;
-      if(prev){gap=n.x0-prev.box.x1;if(next&&n.x1>next.box.x0)continue;}
-      else gap=next.box.x0-n.x1;
+      if(prev){gap=n.x0-prev.n.x1;if(next&&n.x1>next.n.x0)continue;}
+      else gap=next.n.x0-n.x1;
       if(gap<0||gap>10*h)continue;
       const s=gap/h+(n.fuzzy?1.5:0);
       if(!best||s<best.s)best={n,s};
     }
     if(best)take(k,best.n,(prev||next).align);
   }
-  return done.size;
+  return res;
+}
+function applyFound(res,time){
+  for(const k of LABEL_KEYS){
+    const r=res[k];
+    if(r&&fv[k].src!=='hand'){setField(k,r.n,'scan',r.align);fv[k].found=r.n.t;}
+  }
+  if(time&&fv.time.src!=='hand'){setField('time',time,'scan','center',time.t);fv.time.found=time.t;}
 }
 function styleNumeric(e,k){
   const h=e.y1-e.y0,L=layout&&layout.f&&layout.f[k]&&layout.f[k].style;
@@ -1029,10 +1098,10 @@ async function applyFields(){
     n++;done.push(f.name);
   }
   render();overlay();
-  const un=FIELDS.filter(f=>!fv[f.k].box).map(f=>f.name);
+  const un=FIELDS.filter(f=>((vals&&vals[f.k])||'').trim()&&!fv[f.k].box).map(f=>f.name);
   let msg;
-  if(un.length)msg=(n?`Replaced ${done.join(', ')}. `:'')+`Couldn't find ${un.join(', ')} automatically. Tap Set in the box above the image, then drag over the old number.`;
-  else if(n)msg=`Replaced ${done.join(', ')}. Check the result, then tap Save.`;
+  if(un.length)msg=(n?`Replaced ${done.join(', ')}. `:'')+`Couldn't find ${un.join(', ')} automatically. Tap Set in the box above the image, then drag over the old value.`;
+  else if(n)msg=`Replaced ${done.join(', ')}. Check it with Preview, then tap Save & finish.`;
   else msg='Confirm the new values first.';
   setStatus(msg,null);
   return n;
@@ -1054,152 +1123,98 @@ document.querySelectorAll('[data-set]').forEach(b=>b.addEventListener('click',()
   window.scrollTo({top:Math.max(0,$('#scroller').offsetTop-70),behavior:'smooth'});
 }));
 
-/* ---------- two-step flow: read values, then edit a target ---------- */
-let phase='source',vals=null,cancelRead=false;
+/* ---------- flow: nosebleeds ticket first, then the lower bowl ticket ---------- */
+let phase='target',vals=null,cancelRead=false,lower=null;
 document.querySelectorAll('[data-phase]').forEach(l=>l.addEventListener('click',()=>{phase=l.dataset.phase;}));
+function syncDock(){$('#dock').hidden=$('#work').hidden||!sheet.hidden;}
 function wstep(n){
-  for(const id of ['pick','crop','read','confirm','target'])$('#w-'+id).hidden=id!==n;
-  $('#empty').hidden=false;$('#work').hidden=true;$('#actions').hidden=true;
+  for(const id of ['pick','read','lower','confirm','done'])$('#w-'+id).hidden=id!==n;
+  $('#empty').hidden=false;$('#work').hidden=true;$('#actions').hidden=(n==='pick');
+  syncDock();
 }
-function drawPreview(){
-  const bs=FIELDS.map(f=>fv[f.k].box).filter(Boolean),c=$('#pv');
-  if(!bs.length){c.hidden=true;return;}
-  c.hidden=false;
-  const ah=bs.reduce((s,b)=>s+(b.y1-b.y0),0)/bs.length,pad=Math.max(24,ah*2.5);
+function cropPreview(canvas,img,bs,minPad){
+  if(!bs.length){canvas.hidden=true;return;}
+  canvas.hidden=false;
+  const ah=bs.reduce((s,b)=>s+(b.y1-b.y0),0)/bs.length,pad=Math.max(minPad,ah*2.5);
   const rx=Math.max(0,Math.min(...bs.map(b=>b.x0))-pad),ry=Math.max(0,Math.min(...bs.map(b=>b.y0))-pad);
-  const rx1=Math.min(W,Math.max(...bs.map(b=>b.x1))+pad),ry1=Math.min(H,Math.max(...bs.map(b=>b.y1))+pad);
+  const rx1=Math.min(img.W,Math.max(...bs.map(b=>b.x1))+pad),ry1=Math.min(img.H,Math.max(...bs.map(b=>b.y1))+pad);
   const rw=rx1-rx,rh=ry1-ry,s=Math.min(2,640/rw);
-  c.width=Math.round(rw*s);c.height=Math.round(rh*s);
-  const x=c.getContext('2d');x.drawImage(src,rx,ry,rw,rh,0,0,c.width,c.height);
+  canvas.width=Math.round(rw*s);canvas.height=Math.round(rh*s);
+  const x=canvas.getContext('2d');x.drawImage(img.src,rx,ry,rw,rh,0,0,canvas.width,canvas.height);
   x.lineWidth=3;x.strokeStyle='#3345ff';
   for(const b of bs)x.strokeRect((b.x0-rx)*s-2,(b.y0-ry)*s-2,(b.x1-b.x0)*s+4,(b.y1-b.y0)*s+4);
 }
-function readSource(){
-  const n=autoFind();
-  for(const f of FIELDS){const s=fv[f.k];$('#c-'+f.k).value=(s.box&&(s.found||s.orig))||'';}
-  drawPreview();
-  $('#w-recrop').hidden=false;
-  $('#w-note').textContent=n===3?'Check these against the lower bowl ticket and fix anything that looks wrong.'
-    :n?`Read ${n} of 3 from the lower bowl ticket. Type the rest.`
-    :"Couldn't find Section, Row and Seat on the lower bowl ticket. Type them below.";
+
+/* Step 2: the lower bowl ticket. Only its values are read; the nosebleeds ticket stays loaded, so this can be retried. */
+async function loadLower(file){
+  $('#err').hidden=true;
+  let img;
+  try{img=await decodeToCanvas(file);}
+  catch(e){showErr("Couldn't open that image ("+(e&&e.message||e)+"). Try a PNG or JPEG screenshot.");return;}
+  lower=img;cancelRead=false;
+  wstep('read');$('#w-read h2').textContent='Reading the lower bowl ticket…';$('#w-skip').hidden=false;
+  setStatus('Starting…',0);
+  try{
+    const out=await scanImage(img,isDark(img.src),new Set());
+    if(cancelRead)return;
+    lowerDone(img,out);
+  }catch(err){
+    console.error(err);ocrFail=null;worker=null;
+    if(cancelRead)return;
+    lowerFailed(err);
+  }
+}
+function lowerDone(img,out){
+  const got=LABEL_KEYS.filter(k=>out.res[k]);
+  for(const k of LABEL_KEYS)$('#c-'+k).value=out.res[k]?out.res[k].n.t:'';
+  $('#c-time').value=out.time?out.time.t:'';
+  cropPreview($('#pv'),img,got.map(k=>out.res[k].n),24);
+  cropPreview($('#pv2'),img,out.time?[out.time]:[],30);
+  $('#w-note').textContent=got.length===3&&out.time?'Check these against the lower bowl ticket and fix anything that looks wrong.'
+    :got.length===3?'Read the seat details. No clock found at the top, so type the time or leave it blank.'
+    :got.length?`Read ${got.length} of 3 seat numbers. Type the rest, or retry with another screenshot.`
+    :"Couldn't find Section, Row and Seat. Type them below, or retry with another screenshot.";
   wstep('confirm');
 }
-function readSourceFailed(err){
+function lowerFailed(err){
   for(const f of FIELDS)$('#c-'+f.k).value='';
-  $('#pv').hidden=true;$('#w-recrop').hidden=true;
-  $('#w-note').textContent="Automatic reading isn't available here ("+((err&&err.message)||err)+"). Type the new values below.";
+  $('#pv').hidden=true;$('#pv2').hidden=true;
+  $('#w-note').textContent="Automatic reading isn't available here ("+((err&&err.message)||err)+"). Type the values below.";
   wstep('confirm');
 }
 function typeInstead(){
-  cancelRead=true;$('#w-recrop').hidden=true;
+  cancelRead=true;
   FIELDS.forEach(f=>{$('#c-'+f.k).value=(vals&&vals[f.k])||'';});
-  $('#pv').hidden=true;
-  $('#w-note').textContent='Type the new Section, Row and Seat.';
+  $('#pv').hidden=true;$('#pv2').hidden=true;
+  $('#w-note').textContent='Type the lower bowl Section, Row and Seat. The time is optional.';
   wstep('confirm');
 }
 $('#w-type').addEventListener('click',typeInstead);
 $('#w-skip').addEventListener('click',typeInstead);
-$('#w-change').addEventListener('click',()=>{
-  FIELDS.forEach(f=>{$('#c-'+f.k).value=(vals&&vals[f.k])||'';});
-  $('#pv').hidden=true;$('#w-note').textContent='Edit the values, then confirm.';
-  wstep('confirm');
-});
+$('#w-back').addEventListener('click',()=>wstep('lower'));
+function showResult(){
+  $('#empty').hidden=true;$('#work').hidden=false;$('#actions').hidden=false;
+  located=true;syncDock();render();overlay();
+  window.scrollTo(0,0);
+  applyFields();
+}
 $('#w-ok').addEventListener('click',()=>{
   const v={},bad=[];
-  for(const f of FIELDS){v[f.k]=$('#c-'+f.k).value.trim();if(!v[f.k])bad.push(f.name);}
+  for(const f of FIELDS)v[f.k]=$('#c-'+f.k).value.trim();
+  for(const k of LABEL_KEYS)if(!v[k])bad.push(FIELDS.find(f=>f.k===k).name);
   if(bad.length){$('#w-note').textContent='Fill in '+bad.join(', ')+' to continue.';return;}
-  vals=v;
-  $('#w-sum').textContent='Lower bowl: '+FIELDS.map(f=>`${f.name} ${v[f.k]}`).join('  ·  ');
-  wstep('target');
+  if(v.time&&!/^\d{1,2}:\d{2}$/.test(v.time)){$('#w-note').textContent='Enter the time like 9:41, or leave it blank.';return;}
+  vals=v;showResult();
 });
 FIELDS.forEach((f,i)=>$('#c-'+f.k).addEventListener('keydown',ev=>{
   if(ev.key!=='Enter')return;
   ev.preventDefault();
   if(i<FIELDS.length-1)$('#c-'+FIELDS[i+1].k).focus();else{ev.target.blur();$('#w-ok').click();}
 }));
-$('#restart').addEventListener('click',()=>{
-  closeSheet();vals=null;phase='source';wstep('pick');window.scrollTo(0,0);
-});
-/* ---------- crop step for the first screenshot ---------- */
-let crop=null,cdrag=null;
-function startCrop(){
-  crop=null;cdrag=null;
-  const c=$('#cropcv'),k=Math.min(1,1200/Math.max(W,H));
-  c.width=Math.round(W*k);c.height=Math.round(H*k);
-  c.getContext('2d').drawImage(src,0,0,c.width,c.height);
-  wstep('crop');
-  requestAnimationFrame(drawCrop);
-}
-function drawCrop(){
-  const oc=$('#cropov'),r=$('#cropcv').getBoundingClientRect();
-  oc.width=Math.max(1,Math.round(r.width));oc.height=Math.max(1,Math.round(r.height));
-  const x=oc.getContext('2d');
-  x.fillStyle='rgba(0,0,0,.5)';x.fillRect(0,0,oc.width,oc.height);
-  if(!crop)return;
-  const a=crop.x0*oc.width,b=crop.y0*oc.height,c=(crop.x1-crop.x0)*oc.width,d=(crop.y1-crop.y0)*oc.height;
-  x.clearRect(a,b,c,d);
-  x.strokeStyle='#fff';x.lineWidth=2;x.strokeRect(a,b,c,d);
-  x.fillStyle='#fff';x.strokeStyle='#3345ff';
-  for(const [px,py] of [[a,b],[a+c,b],[a,b+d],[a+c,b+d]]){x.fillRect(px-7,py-7,14,14);x.strokeRect(px-7,py-7,14,14);}
-}
-const cropPt=ev=>{
-  const r=$('#cropcv').getBoundingClientRect();
-  return {x:Math.min(1,Math.max(0,(ev.clientX-r.left)/(r.width||1))),y:Math.min(1,Math.max(0,(ev.clientY-r.top)/(r.height||1)))};
-};
-$('#cropbox').addEventListener('pointerdown',ev=>{
-  ev.preventDefault();
-  try{$('#cropbox').setPointerCapture(ev.pointerId);}catch(e){}
-  const p=cropPt(ev),r=$('#cropcv').getBoundingClientRect(),hx=24/(r.width||1),hy=24/(r.height||1);
-  if(crop){
-    for(const [cx,cy] of [['x0','y0'],['x1','y0'],['x0','y1'],['x1','y1']]){
-      if(Math.abs(p.x-crop[cx])<hx&&Math.abs(p.y-crop[cy])<hy){
-        cdrag={mode:'new',ax:crop[cx==='x0'?'x1':'x0'],ay:crop[cy==='y0'?'y1':'y0']};return;
-      }
-    }
-    if(p.x>crop.x0&&p.x<crop.x1&&p.y>crop.y0&&p.y<crop.y1){cdrag={mode:'move',px:p.x,py:p.y,c:{...crop}};return;}
-  }
-  cdrag={mode:'new',ax:p.x,ay:p.y};crop={x0:p.x,y0:p.y,x1:p.x,y1:p.y};drawCrop();
-});
-$('#cropbox').addEventListener('pointermove',ev=>{
-  if(!cdrag)return;
-  const p=cropPt(ev);
-  if(cdrag.mode==='new')crop={x0:Math.min(cdrag.ax,p.x),y0:Math.min(cdrag.ay,p.y),x1:Math.max(cdrag.ax,p.x),y1:Math.max(cdrag.ay,p.y)};
-  else{
-    const c=cdrag.c,w=c.x1-c.x0,h=c.y1-c.y0;
-    const nx=Math.min(1-w,Math.max(0,c.x0+p.x-cdrag.px)),ny=Math.min(1-h,Math.max(0,c.y0+p.y-cdrag.py));
-    crop={x0:nx,y0:ny,x1:nx+w,y1:ny+h};
-  }
-  drawCrop();
-});
-['pointerup','pointercancel'].forEach(n=>$('#cropbox').addEventListener(n,()=>{cdrag=null;}));
-window.addEventListener('resize',()=>{if(!$('#w-crop').hidden)drawCrop();});
-function readFromCrop(whole){
-  let region=null;
-  if(!whole&&crop){
-    const r={x:crop.x0*W,y:crop.y0*H,w:(crop.x1-crop.x0)*W,h:(crop.y1-crop.y0)*H};
-    if(r.w>=40&&r.h>=24)region=r;
-  }
-  cancelRead=false;
-  wstep('read');setStatus('Reading the lower bowl ticket…',0);
-  runOCR(region);
-}
-$('#crop-go').addEventListener('click',()=>readFromCrop(false));
-$('#crop-all').addEventListener('click',()=>readFromCrop(true));
-$('#w-recrop').addEventListener('click',()=>{resetFields();startCrop();});
-
-/* After the screenshot to edit is read: locate the numbers, replace what was found, ask about the rest. */
-async function targetDone(ocrOk,err){
-  if(ocrOk)autoFind();
-  located=true;
-  fillFromLayout();
-  for(const f of FIELDS){const s=fv[f.k];if(s.box&&!s.orig&&s.src==='layout')s.orig=ocrDigits(s.box);}
-  overlay();
-  if(!vals){setStatus('Start over and confirm the new values first.',null);return;}
-  setStatus('Replacing the numbers…',null);
-  await applyFields();
-  if(!ocrOk&&FIELDS.some(f=>!fv[f.k].box))
-    setStatus($('#stext').textContent+" (Automatic scanning isn't available in this view, so use Set. Your hosted link will scan.)",null);
-}
+function startOver(){closeSheet();vals=null;phase='target';edits=[];wstep('pick');window.scrollTo(0,0);}
+$('#restart').addEventListener('click',startOver);
+$('#w-new').addEventListener('click',startOver);
+$('#w-return').addEventListener('click',()=>{$('#empty').hidden=true;$('#work').hidden=false;$('#actions').hidden=false;syncDock();});
 
 /* ---------- toolbar ---------- */
 document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{
@@ -1214,7 +1229,13 @@ document.querySelectorAll('[data-z]').forEach(b=>b.addEventListener('click',()=>
   if(sel)requestAnimationFrame(reveal);
 }));
 $('#boxes').addEventListener('click',()=>{const on=$('#boxes').getAttribute('aria-pressed')!=='true';$('#boxes').setAttribute('aria-pressed',on);ov.classList.toggle('quiet',!on);});
-$('#rescan').addEventListener('click',()=>{invertOCR=!invertOCR;updateRescan();runOCR(null);});
+$('#rescan').addEventListener('click',async()=>{
+  invertOCR=!invertOCR;updateRescan();setStatus('Rescanning…',0);
+  const err=await scanTarget();
+  if(err)setStatus("Scanning isn't available in this view.",null);
+  else if(vals)await applyFields();
+  else setStatus('Scan finished.',null);
+});
 
 /* ---------- save ---------- */
 function dataUrlToFile(u){
@@ -1222,16 +1243,26 @@ function dataUrlToFile(u){
   for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);
   return new File([a],'retext.png',{type:'image/png'});
 }
-$('#save').addEventListener('click',()=>{
+function saveAndFinish(){
   if(!src)return;
   let url,file;
   try{url=cv.toDataURL('image/png');file=dataUrlToFile(url);}
   catch(e){showErr("Couldn't export the image ("+(e&&e.message||e)+").");return;}
+  const finish=()=>{$('#viewer').hidden=true;$('#preview').hidden=true;wstep('done');};
   const fallback=()=>{$('#vimg').src=url;$('#vdl').href=url;$('#viewer').hidden=false;};
   if(navigator.canShare&&navigator.canShare({files:[file]})){
-    navigator.share({files:[file]}).catch(err=>{if(!err||err.name!=='AbortError')fallback();});
+    navigator.share({files:[file]}).then(finish).catch(err=>{if(!err||err.name!=='AbortError')fallback();});
   }else fallback();
+}
+$('#save').addEventListener('click',saveAndFinish);
+$('#psave').addEventListener('click',()=>{$('#preview').hidden=true;saveAndFinish();});
+$('#previewbtn').addEventListener('click',()=>{
+  try{$('#pimg').src=cv.toDataURL('image/jpeg',.92);}
+  catch(e){showErr("Couldn't build the preview ("+(e&&e.message||e)+").");return;}
+  $('#preview').hidden=false;
 });
+$('#pback').addEventListener('click',()=>{$('#preview').hidden=true;});
+$('#vdone').addEventListener('click',()=>{$('#viewer').hidden=true;wstep('done');});
 $('#vclose').addEventListener('click',()=>{$('#viewer').hidden=true;});
 })();
 </script>
