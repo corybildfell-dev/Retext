@@ -75,6 +75,10 @@ body{margin:0;background:var(--bg);color:var(--ink);
 #w-note{margin:10px auto 0}
 .drop .fr+.fr{margin-top:8px}
 
+#cropbox{position:relative;display:inline-block;max-width:100%;touch-action:none;line-height:0;margin-top:8px;-webkit-user-select:none;user-select:none}
+#cropcv{display:block;max-width:100%;max-height:56dvh;width:auto;height:auto;border-radius:8px}
+#cropov{position:absolute;left:0;top:0;width:100%;height:100%;border-radius:8px}
+
 /* ticket fields */
 #fields{margin:0 16px 10px;padding:12px;border-radius:14px;background:var(--surface);box-shadow:0 0 0 1px var(--line)}
 .fh{display:flex;align-items:center;gap:8px}
@@ -146,10 +150,17 @@ input[type=text],select{font:16px -apple-system,system-ui,sans-serif;height:42px
       <s>Sec 112  Row 5  Seat 8</s>
       <span class="new">Sec 204  Row 12  Seat 3</span>
     </div>
-    <h1>Update the nosebleeds ticket</h1>
+    <h1>Start with the lower bowl ticket</h1>
     <p>Step 1 of 2. Choose the lower bowl ticket. Its Section, Row and Seat are read from it.</p>
     <label class="cta" for="file" data-phase="source">Choose lower bowl ticket</label>
     <button class="linkbtn" id="w-type" type="button">Type the values instead</button>
+  </div>
+  <div class="drop wiz" id="w-crop" hidden>
+    <h2>Crop to the seat info</h2>
+    <p>Drag over the part that shows Section, Row and Seat. A tight crop reads best.</p>
+    <div id="cropbox"><canvas id="cropcv"></canvas><canvas id="cropov"></canvas></div>
+    <button class="btn primary" id="crop-go" type="button" style="width:100%;height:46px;margin-top:14px">Read this area</button>
+    <button class="linkbtn" id="crop-all" type="button">Use the whole image</button>
   </div>
   <div class="drop wiz" id="w-read" hidden>
     <h2>Reading the lower bowl ticket…</h2>
@@ -165,6 +176,7 @@ input[type=text],select{font:16px -apple-system,system-ui,sans-serif;height:42px
       <div class="fr"><label for="c-row">Row</label><input id="c-row" type="text" inputmode="numeric" autocomplete="off" autocorrect="off" placeholder="Number"></div>
       <div class="fr"><label for="c-seat">Seat</label><input id="c-seat" type="text" inputmode="numeric" autocomplete="off" autocorrect="off" placeholder="Number"></div>
     <button class="btn primary" id="w-ok" type="button" style="width:100%;margin-top:16px;height:46px">Confirm</button>
+    <button class="linkbtn" id="w-recrop" type="button">Crop and read again</button>
   </div>
   <div class="drop wiz" id="w-target" hidden>
     <h2>Step 2 of 2</h2>
@@ -355,8 +367,7 @@ async function loadFile(file){
   resetFields();
   closeSheet();setDrawing(false);
   cancelRead=false;located=false;
-  if(phase==='source'){wstep('read');setStatus('Reading the lower bowl ticket…',0);}
-  else{
+  if(phase!=='source'){
     fillFromLayout();render();overlay();
     $('#empty').hidden=true;$('#work').hidden=false;$('#actions').hidden=false;
     window.scrollTo(0,0);
@@ -364,7 +375,7 @@ async function loadFile(file){
   invertOCR=isDark();
   updateRescan();
   preloadFonts();
-  runOCR();
+  if(phase==='source')startCrop();else runOCR(null);
 }
 
 function isDark(){
@@ -386,8 +397,63 @@ function setStatus(msg,p){
 }
 function updateRescan(){$('#rescan').textContent=invertOCR?'Rescan normal':'Rescan inverted';}
 
-async function runOCR(){
-  setStatus('Starting text detection… Draw box already works if you want to start now.',0);
+function invertCanvas(c){
+  const x=c.getContext('2d'),id=x.getImageData(0,0,c.width,c.height),p=id.data;
+  for(let i=0;i<p.length;i+=4){p[i]=255-p[i];p[i+1]=255-p[i+1];p[i+2]=255-p[i+2];}
+  x.putImageData(id,0,0);
+}
+function ocrCanvas(base,scale,invert){
+  const c=document.createElement('canvas');
+  c.width=Math.max(1,Math.round(base.w*scale));c.height=Math.max(1,Math.round(base.h*scale));
+  const x=c.getContext('2d');x.imageSmoothingQuality='high';
+  x.drawImage(src,base.x,base.y,base.w,base.h,0,0,c.width,c.height);
+  if(invert)invertCanvas(c);
+  return c;
+}
+async function pass(canvas,psm,whitelist){
+  await worker.setParameters({tessedit_pageseg_mode:String(psm),tessedit_char_whitelist:whitelist||''});
+  const {data}=await worker.recognize(canvas);
+  return data;
+}
+function mergeWords(a,b){
+  const out=a.slice();
+  for(const w of b){
+    let hit=-1;
+    for(let i=0;i<out.length;i++){
+      const v=out[i],ix=Math.min(v.x1,w.x1)-Math.max(v.x0,w.x0),iy=Math.min(v.y1,w.y1)-Math.max(v.y0,w.y0);
+      if(ix>0&&iy>0&&ix*iy>.5*Math.min((v.x1-v.x0)*(v.y1-v.y0),(w.x1-w.x0)*(w.y1-w.y0))){hit=i;break;}
+    }
+    if(hit<0)out.push(w);else if(w.c>out[hit].c)out[hit]=w;
+  }
+  return out;
+}
+/* Reads just the digits in the space beside and below each label that has no number yet. */
+async function rereadDigits(ws){
+  const {labels}=parseWords(ws),all=[].concat(labels.sec,labels.row,labels.seat),extra=[];
+  for(const f of FIELDS){
+    if(fv[f.k].box||!labels[f.k].length)continue;
+    const L=labels[f.k][0],h=L.y1-L.y0;
+    let stop=Infinity;
+    for(const o of all){if(o===L)continue;if(Math.min(L.y1,o.y1)-Math.max(L.y0,o.y0)>0&&o.x0>L.x1)stop=Math.min(stop,o.x0);}
+    const regs=[
+      {x0:L.x1+.2*h,y0:L.y0-.4*h,x1:Math.min(L.x1+5*h,stop-.3*h),y1:L.y1+.4*h},
+      {x0:L.x0-h,y0:L.y1,x1:Math.min(L.x1+3*h,stop-.3*h),y1:L.y1+4*h}
+    ];
+    for(const r0 of regs){
+      const r={x0:Math.max(0,r0.x0),y0:Math.max(0,r0.y0),x1:Math.min(W,r0.x1),y1:Math.min(H,r0.y1)};
+      if(r.x1-r.x0<h*.8||r.y1-r.y0<h*.8)continue;
+      const sc=Math.max(1,Math.min(4,48/Math.max(h,1)));
+      const c=ocrCanvas({x:r.x0,y:r.y0,w:r.x1-r.x0,h:r.y1-r.y0},sc,invertOCR);
+      const data=await pass(c,7,'0123456789');
+      for(const w of normalizeOCR(data,sc,r.x0,r.y0,50))if(/^\d{1,4}$/.test(w.t))extra.push(w);
+    }
+  }
+  return extra;
+}
+
+/* region = part of the image to read (the crop), or null for all of it. Escalates only if numbers are missing. */
+async function runOCR(region){
+  setStatus('Starting text detection…',0);
   try{
     if(typeof Tesseract==='undefined')throw new Error('no library');
     if(!worker){
@@ -399,18 +465,15 @@ async function runOCR(){
       make.catch(()=>{});
       worker=await Promise.race([make,new Promise((_,rej)=>setTimeout(()=>rej(new Error('timed out')),90000)),new Promise((_,rej)=>{ocrFail=rej;})]);
       ocrFail=null;
-      await worker.setParameters({tessedit_pageseg_mode:'11'});
     }
-    const scale=W<900?2:1;
-    const c=document.createElement('canvas');c.width=W*scale;c.height=H*scale;
-    const x=c.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(src,0,0,c.width,c.height);
-    if(invertOCR){
-      const id=x.getImageData(0,0,c.width,c.height),p=id.data;
-      for(let i=0;i<p.length;i+=4){p[i]=255-p[i];p[i+1]=255-p[i+1];p[i+2]=255-p[i+2];}
-      x.putImageData(id,0,0);
-    }
-    const {data}=await worker.recognize(c);
-    words=normalizeOCR(data,scale);
+    const base=region||{x:0,y:0,w:W,h:H};
+    const scale=base.w<1100?Math.min(3,1100/base.w):1;
+    const read=async(psm,inv)=>normalizeOCR(await pass(ocrCanvas(base,scale,inv),psm,''),scale,base.x,base.y);
+    words=await read(11,invertOCR);
+    let n=autoFind();
+    if(n<3&&!cancelRead){setStatus('Looking more closely…',null);words=mergeWords(words,await read(6,invertOCR));n=autoFind();}
+    if(n<3&&!cancelRead){setStatus('Trying the other contrast…',null);words=mergeWords(words,await read(11,!invertOCR));n=autoFind();}
+    if(n<3&&!cancelRead){setStatus('Reading the numbers beside each label…',null);words=mergeWords(words,await rereadDigits(words));n=autoFind();}
     rebuildBoxes();
     if(cancelRead)return;
     if(phase==='source'){readSource();return;}
@@ -424,21 +487,23 @@ async function runOCR(){
   }
 }
 
-function normalizeOCR(data,s){
+function normalizeOCR(data,s,ox,oy,minConf){
+  ox=ox||0;oy=oy||0;minConf=minConf==null?12:minConf;
   let ws=data.words;
   if(!ws&&data.blocks){
     ws=[];
     for(const b of data.blocks)for(const p of b.paragraphs||[])for(const l of p.lines||[])for(const w of l.words||[])ws.push(w);
   }
-  return (ws||[]).filter(w=>w.text&&w.text.trim()&&w.confidence>=35&&w.bbox)
-    .map(w=>({t:w.text.trim(),x0:w.bbox.x0/s,y0:w.bbox.y0/s,x1:w.bbox.x1/s,y1:w.bbox.y1/s}));
+  return (ws||[]).filter(w=>w.text&&w.text.trim()&&w.confidence>=minConf&&w.bbox)
+    .map(w=>({t:w.text.trim(),c:w.confidence,x0:w.bbox.x0/s+ox,y0:w.bbox.y0/s+oy,x1:w.bbox.x1/s+ox,y1:w.bbox.y1/s+oy}));
 }
 
 function rebuildBoxes(){
   boxes=[];
-  if(mode==='words'){boxes=words.map(w=>({...w}));}
+  const solid=words.filter(w=>(w.c==null||w.c>=35));
+  if(mode==='words'){boxes=solid.map(w=>({...w}));}
   else{
-    const ws=[...words].sort((a,b)=>a.x0-b.x0);
+    const ws=[...solid].sort((a,b)=>a.x0-b.x0);
     for(const w of ws){
       const wh=w.y1-w.y0;let hit=null,bestGap=1e9;
       for(const b of boxes){
@@ -834,25 +899,61 @@ function fillFromLayout(){
   }
 }
 /* Finds the numbers next to the labels SEC / ROW / SEAT in the scanned words. */
-function autoFind(){
-  if(!words.length)return 0;
+function lev(a,b){
+  const d=[];for(let i=0;i<=a.length;i++){d[i]=[i];}for(let j=1;j<=b.length;j++)d[0][j]=j;
+  for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)
+    d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+  return d[a.length][b.length];
+}
+/* Which label (if any) a scanned token is, allowing for common misreads like SEA7 or R0W. */
+function labelOf(t){
+  const u=t.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(u.length<3||u.length>8)return null;
+  const v=u.replace(/0/g,'O').replace(/1/g,'I').replace(/5/g,'S');
+  if(v==='SEC'||v==='SECT'||v==='SECTION')return 'sec';
+  if(v==='ROW'||v==='ROWS')return 'row';
+  if(v==='SEAT'||v==='SEATS')return 'seat';
+  if(v.length>=6&&lev(v,'SECTION')<=1)return 'sec';
+  if(v[0]==='S'&&v.length>=4&&v.length<=5&&(lev(v,'SEAT')<=1||lev(v,'SEATS')<=1))return 'seat';
+  if(v[0]==='R'&&v.length===3&&lev(v,'ROW')<=1)return 'row';
+  return null;
+}
+const LOOKALIKE={O:'0',o:'0',I:'1',l:'1',i:'1',S:'5',s:'5',B:'8',Z:'2',z:'2',g:'9',q:'9'};
+function parseWords(ws){
   const strip=s=>s.replace(/^[^\w]+|[^\w]+$/g,'');
-  const nums=[],labels={sec:[],row:[],seat:[]};
-  for(const w of words){
-    const ww=w.x1-w.x0,len=w.t.length;
-    const m=GLUED.exec(w.t);
+  const labels={sec:[],row:[],seat:[]},nums=[],joined=new Set();
+  const sorted=[...ws].sort((a,b)=>a.x0-b.x0);
+  for(let i=0;i<sorted.length;i++)for(let j=i+1;j<sorted.length;j++){      // labels split in two, like SEA + T
+    const a=sorted[i],b=sorted[j];
+    if(joined.has(a)||joined.has(b))continue;
+    const ah=a.y1-a.y0,bh=b.y1-b.y0,h=Math.max(ah,bh),gap=b.x0-a.x1;
+    if(Math.min(a.y1,b.y1)-Math.max(a.y0,b.y0)<.6*Math.min(ah,bh)||gap<-.2*h||gap>.6*h)continue;
+    if(labelOf(a.t)||labelOf(b.t))continue;
+    const k=labelOf(a.t+b.t);
+    if(k){labels[k].push({x0:a.x0,y0:Math.min(a.y0,b.y0),x1:b.x1,y1:Math.max(a.y1,b.y1)});joined.add(a);joined.add(b);}
+  }
+  for(const w of ws){
+    if(joined.has(w))continue;
+    const ww=w.x1-w.x0,len=w.t.length,m=GLUED.exec(w.t);
     if(m){
-      const f=FIELDS.find(f=>f.re.test(m[1])),cut=w.t.indexOf(m[2]),end=len-(cut+m[2].length);
-      nums.push({t:m[2],x0:w.x0+ww*cut/len,x1:w.x1-ww*end/len,y0:w.y0,y1:w.y1,glued:f.k});
+      const cut=w.t.indexOf(m[2]),end=len-(cut+m[2].length);
+      nums.push({t:m[2],x0:w.x0+ww*cut/len,x1:w.x1-ww*end/len,y0:w.y0,y1:w.y1,glued:labelOf(m[1])});
       continue;
     }
-    const c=strip(w.t),f=FIELDS.find(f=>f.re.test(c));
-    if(f){labels[f.k].push(w);continue;}
-    if(/^\d{1,4}$/.test(c)){
+    const c=strip(w.t),k=labelOf(c);
+    if(k){labels[k].push(w);continue;}
+    if(/^\d{1,4}$/.test(c)&&(w.c==null||w.c>=25)){
       const pre=w.t.indexOf(c),post=len-pre-c.length;
       nums.push({t:c,x0:w.x0+ww*pre/len,x1:w.x1-ww*post/len,y0:w.y0,y1:w.y1});
+    }else if(c.length>=1&&c.length<=2&&/^[OoIliSsBZzgq]+$/.test(c)&&(w.c==null||w.c>=40)){
+      nums.push({t:[...c].map(ch=>LOOKALIKE[ch]).join(''),x0:w.x0,x1:w.x1,y0:w.y0,y1:w.y1,fuzzy:true});
     }
   }
+  return {labels,nums};
+}
+function autoFind(){
+  if(!words.length)return 0;
+  const {labels,nums}=parseWords(words);
   const used=new Set(),done=new Set();
   const take=(k,n,align)=>{used.add(n);done.add(k);setField(k,n,'scan',align);fv[k].found=n.t;};
   for(const n of nums)if(n.glued&&!done.has(n.glued)&&fv[n.glued].src!=='hand')take(n.glued,n,'left');
@@ -874,11 +975,35 @@ function autoFind(){
           align=dl<=dcx&&dl<=dr?'left':dr<dcx?'right':'center';
         }
       }
-      if(score!=null)pairs.push({k:f.k,n,score,align});
+      if(score!=null)pairs.push({k:f.k,n,score:score+(n.fuzzy?1.5:0),align});
     }
   }
   pairs.sort((p,q)=>p.score-q.score);
   for(const p of pairs){if(done.has(p.k)||used.has(p.n))continue;take(p.k,p.n,p.align);}
+  /* A number is still missing: SEC, ROW, SEAT appear in that order, so look for one in the gap next to its neighbor. */
+  const order=['sec','row','seat'];
+  for(let i=0;i<3;i++){
+    const k=order[i];
+    if(done.has(k)||fv[k].src==='hand')continue;
+    let prev=null,next=null;
+    for(let j=i-1;j>=0;j--)if(done.has(order[j])){prev=fv[order[j]];break;}
+    for(let j=i+1;j<3;j++)if(done.has(order[j])){next=fv[order[j]];break;}
+    if(!prev&&!next)continue;
+    const ref=(prev||next).box,rh=ref.y1-ref.y0;
+    let best=null;
+    for(const n of nums){
+      if(used.has(n)||n.glued)continue;
+      const nh=n.y1-n.y0,h=Math.max(rh,nh);
+      if(Math.min(ref.y1,n.y1)-Math.max(ref.y0,n.y0)<.5*Math.min(rh,nh))continue;
+      let gap;
+      if(prev){gap=n.x0-prev.box.x1;if(next&&n.x1>next.box.x0)continue;}
+      else gap=next.box.x0-n.x1;
+      if(gap<0||gap>10*h)continue;
+      const s=gap/h+(n.fuzzy?1.5:0);
+      if(!best||s<best.s)best={n,s};
+    }
+    if(best)take(k,best.n,(prev||next).align);
+  }
   return done.size;
 }
 function styleNumeric(e,k){
@@ -933,7 +1058,7 @@ document.querySelectorAll('[data-set]').forEach(b=>b.addEventListener('click',()
 let phase='source',vals=null,cancelRead=false;
 document.querySelectorAll('[data-phase]').forEach(l=>l.addEventListener('click',()=>{phase=l.dataset.phase;}));
 function wstep(n){
-  for(const id of ['pick','read','confirm','target'])$('#w-'+id).hidden=id!==n;
+  for(const id of ['pick','crop','read','confirm','target'])$('#w-'+id).hidden=id!==n;
   $('#empty').hidden=false;$('#work').hidden=true;$('#actions').hidden=true;
 }
 function drawPreview(){
@@ -953,6 +1078,7 @@ function readSource(){
   const n=autoFind();
   for(const f of FIELDS){const s=fv[f.k];$('#c-'+f.k).value=(s.box&&(s.found||s.orig))||'';}
   drawPreview();
+  $('#w-recrop').hidden=false;
   $('#w-note').textContent=n===3?'Check these against the lower bowl ticket and fix anything that looks wrong.'
     :n?`Read ${n} of 3 from the lower bowl ticket. Type the rest.`
     :"Couldn't find Section, Row and Seat on the lower bowl ticket. Type them below.";
@@ -960,12 +1086,12 @@ function readSource(){
 }
 function readSourceFailed(err){
   for(const f of FIELDS)$('#c-'+f.k).value='';
-  $('#pv').hidden=true;
+  $('#pv').hidden=true;$('#w-recrop').hidden=true;
   $('#w-note').textContent="Automatic reading isn't available here ("+((err&&err.message)||err)+"). Type the new values below.";
   wstep('confirm');
 }
 function typeInstead(){
-  cancelRead=true;
+  cancelRead=true;$('#w-recrop').hidden=true;
   FIELDS.forEach(f=>{$('#c-'+f.k).value=(vals&&vals[f.k])||'';});
   $('#pv').hidden=true;
   $('#w-note').textContent='Type the new Section, Row and Seat.';
@@ -994,6 +1120,73 @@ FIELDS.forEach((f,i)=>$('#c-'+f.k).addEventListener('keydown',ev=>{
 $('#restart').addEventListener('click',()=>{
   closeSheet();vals=null;phase='source';wstep('pick');window.scrollTo(0,0);
 });
+/* ---------- crop step for the first screenshot ---------- */
+let crop=null,cdrag=null;
+function startCrop(){
+  crop=null;cdrag=null;
+  const c=$('#cropcv'),k=Math.min(1,1200/Math.max(W,H));
+  c.width=Math.round(W*k);c.height=Math.round(H*k);
+  c.getContext('2d').drawImage(src,0,0,c.width,c.height);
+  wstep('crop');
+  requestAnimationFrame(drawCrop);
+}
+function drawCrop(){
+  const oc=$('#cropov'),r=$('#cropcv').getBoundingClientRect();
+  oc.width=Math.max(1,Math.round(r.width));oc.height=Math.max(1,Math.round(r.height));
+  const x=oc.getContext('2d');
+  x.fillStyle='rgba(0,0,0,.5)';x.fillRect(0,0,oc.width,oc.height);
+  if(!crop)return;
+  const a=crop.x0*oc.width,b=crop.y0*oc.height,c=(crop.x1-crop.x0)*oc.width,d=(crop.y1-crop.y0)*oc.height;
+  x.clearRect(a,b,c,d);
+  x.strokeStyle='#fff';x.lineWidth=2;x.strokeRect(a,b,c,d);
+  x.fillStyle='#fff';x.strokeStyle='#3345ff';
+  for(const [px,py] of [[a,b],[a+c,b],[a,b+d],[a+c,b+d]]){x.fillRect(px-7,py-7,14,14);x.strokeRect(px-7,py-7,14,14);}
+}
+const cropPt=ev=>{
+  const r=$('#cropcv').getBoundingClientRect();
+  return {x:Math.min(1,Math.max(0,(ev.clientX-r.left)/(r.width||1))),y:Math.min(1,Math.max(0,(ev.clientY-r.top)/(r.height||1)))};
+};
+$('#cropbox').addEventListener('pointerdown',ev=>{
+  ev.preventDefault();
+  try{$('#cropbox').setPointerCapture(ev.pointerId);}catch(e){}
+  const p=cropPt(ev),r=$('#cropcv').getBoundingClientRect(),hx=24/(r.width||1),hy=24/(r.height||1);
+  if(crop){
+    for(const [cx,cy] of [['x0','y0'],['x1','y0'],['x0','y1'],['x1','y1']]){
+      if(Math.abs(p.x-crop[cx])<hx&&Math.abs(p.y-crop[cy])<hy){
+        cdrag={mode:'new',ax:crop[cx==='x0'?'x1':'x0'],ay:crop[cy==='y0'?'y1':'y0']};return;
+      }
+    }
+    if(p.x>crop.x0&&p.x<crop.x1&&p.y>crop.y0&&p.y<crop.y1){cdrag={mode:'move',px:p.x,py:p.y,c:{...crop}};return;}
+  }
+  cdrag={mode:'new',ax:p.x,ay:p.y};crop={x0:p.x,y0:p.y,x1:p.x,y1:p.y};drawCrop();
+});
+$('#cropbox').addEventListener('pointermove',ev=>{
+  if(!cdrag)return;
+  const p=cropPt(ev);
+  if(cdrag.mode==='new')crop={x0:Math.min(cdrag.ax,p.x),y0:Math.min(cdrag.ay,p.y),x1:Math.max(cdrag.ax,p.x),y1:Math.max(cdrag.ay,p.y)};
+  else{
+    const c=cdrag.c,w=c.x1-c.x0,h=c.y1-c.y0;
+    const nx=Math.min(1-w,Math.max(0,c.x0+p.x-cdrag.px)),ny=Math.min(1-h,Math.max(0,c.y0+p.y-cdrag.py));
+    crop={x0:nx,y0:ny,x1:nx+w,y1:ny+h};
+  }
+  drawCrop();
+});
+['pointerup','pointercancel'].forEach(n=>$('#cropbox').addEventListener(n,()=>{cdrag=null;}));
+window.addEventListener('resize',()=>{if(!$('#w-crop').hidden)drawCrop();});
+function readFromCrop(whole){
+  let region=null;
+  if(!whole&&crop){
+    const r={x:crop.x0*W,y:crop.y0*H,w:(crop.x1-crop.x0)*W,h:(crop.y1-crop.y0)*H};
+    if(r.w>=40&&r.h>=24)region=r;
+  }
+  cancelRead=false;
+  wstep('read');setStatus('Reading the lower bowl ticket…',0);
+  runOCR(region);
+}
+$('#crop-go').addEventListener('click',()=>readFromCrop(false));
+$('#crop-all').addEventListener('click',()=>readFromCrop(true));
+$('#w-recrop').addEventListener('click',()=>{resetFields();startCrop();});
+
 /* After the screenshot to edit is read: locate the numbers, replace what was found, ask about the rest. */
 async function targetDone(ocrOk,err){
   if(ocrOk)autoFind();
@@ -1021,7 +1214,7 @@ document.querySelectorAll('[data-z]').forEach(b=>b.addEventListener('click',()=>
   if(sel)requestAnimationFrame(reveal);
 }));
 $('#boxes').addEventListener('click',()=>{const on=$('#boxes').getAttribute('aria-pressed')!=='true';$('#boxes').setAttribute('aria-pressed',on);ov.classList.toggle('quiet',!on);});
-$('#rescan').addEventListener('click',()=>{invertOCR=!invertOCR;updateRescan();runOCR();});
+$('#rescan').addEventListener('click',()=>{invertOCR=!invertOCR;updateRescan();runOCR(null);});
 
 /* ---------- save ---------- */
 function dataUrlToFile(u){
